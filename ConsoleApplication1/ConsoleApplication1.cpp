@@ -1,103 +1,147 @@
-﻿#include <iostream>
+﻿/*
+Среда: VS 2026
+Выполнил: Поскряков Никита. Институт ispring ПС-21
+24. Задан  текстовый  файл. Каждая строка содержит не более
+255 символов. Создать  новый  файл,  в  котором  строки  будут
+следовать в обратном порядке. Размер файла  не ограничивается.
+Запрещается размещать файл целиком в  основной  памяти.  Файлы
+размером порядка 10 Мгб должны обрабатываться не  более 1 сек.
+(8).
+*/
+
+#include <iostream>
 #include <fstream>
 #include <string>
 #include <vector>
+#include <string_view>
+#include <algorithm>
 
 using namespace std;
-constexpr int MAX_LINES_IN_BUFFER = 10;
 
-typedef struct {
-	string InputFileName;
-	string OutputFileName;
-} Files;
+constexpr int MAX_LINES_IN_BUFFER = 100000;
+constexpr long long CHUNK_SIZE = 1024;
 
+struct Files {
+    string InputFileName;
+    string OutputFileName;
+};
+
+struct LinesBuffer {
+    vector<string> lines;
+    bool isEndOfFile = false;
+    long long cursor = 0;
+
+    void add(const string& line) {
+        lines.push_back(line);
+    }
+
+    void clear() {
+        lines.clear();
+    }
+};
 
 Files InputFileNames() {
-	Files files;
-	cout << "Введите входной файл: ";
-	cin >> files.InputFileName;
-	cout << "Введите выходной файл: ";
-	cin >> files.OutputFileName;
-	return files;
+    Files files;
+    cout << "Введите входной файл: ";
+    cin >> files.InputFileName;
+    cout << "Введите выходной файл: ";
+    cin >> files.OutputFileName;
+    return files;
 }
 
-int ReadLastLinesToBuffer(ifstream& in, vector<string>& buffer, const int bufferSize, int startPosition) {
-	buffer.clear();
-	int currentPosition = startPosition;
-	int countLines = 0;
-	string line;
-	while (currentPosition > 0 && countLines < bufferSize) {
-		in.clear();
-		in.seekg(currentPosition, ios::beg);
+void ReadToBuffer(ifstream& in, LinesBuffer& buffer) {
+    buffer.lines.clear();
+    if (buffer.cursor <= 0) {
+        return;
+    }
 
-		char ch;
-		in.get(ch);
+    long long bytesToRead = min(CHUNK_SIZE, buffer.cursor);
+    long long readStart = buffer.cursor - bytesToRead;
 
-		if (ch == '\n') {
-			in.seekg(currentPosition + 1, ios::beg);
-			if (getline(in, line)) {
-				buffer.push_back(line);
-				countLines++;
-				currentPosition--;
-			}
-		}
-		currentPosition--;
-	}
-	if (currentPosition == 0 && countLines < bufferSize) {
-		in.seekg(0, ios::beg);
-		getline(in, line);
-		buffer.push_back(line);
-	}
-	return currentPosition;
+    in.clear();
+    in.seekg(readStart, ios::beg);
+
+    string chunk(bytesToRead, '\0');
+    in.read(&chunk[0], bytesToRead);
+
+    size_t validStart = 0;
+
+    if (readStart > 0) {
+        size_t firstNewline = chunk.find('\n');
+        if (firstNewline != string::npos) {
+            validStart = firstNewline + 1;
+        }
+    }
+
+    buffer.cursor = readStart + validStart;
+
+    size_t end = bytesToRead;
+
+    if (end > validStart && chunk[end - 1] == '\n') {
+        end--;
+        if (end > validStart && chunk[end - 1] == '\r') {
+            end--;
+        }
+    }
+
+    while (end > validStart) {
+        size_t pos = chunk.rfind('\n', end - 1);
+
+        if (pos == string::npos || pos < validStart) {
+            string line = chunk.substr(validStart, end - validStart);
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            buffer.lines.push_back(line);
+            break;
+        }
+        else {
+            string line = chunk.substr(pos + 1, end - (pos + 1));
+            if (!line.empty() && line.back() == '\r') {
+                line.pop_back();
+            }
+            buffer.lines.push_back(line);
+
+            end = pos;
+            if (end > validStart && chunk[end - 1] == '\r') {
+                end--;
+            }
+        }
+    }
 }
 
-int CountCharsInFile(ifstream& in) {
-	in.seekg(0, ios::end);
-	int countChars = in.tellg();
-	in.seekg(0, ios::beg);
-	return countChars;
+void WriteReverseBuffer(ofstream& out, const LinesBuffer& buffer) {
+    for (const auto& line : buffer.lines) {
+        out << line << "\r\n";
+    }
 }
 
-bool ReverseLines(Files files) {
-	ifstream in(files.InputFileName);
-	if (!in.is_open()) {
-		return 0;
-	}
-	ofstream out(files.OutputFileName);
-	if (!out.is_open()) {
-		return 0;
-	}
-	string line;
-	vector<string> linesBuffer;
-	int cursorPosition = CountCharsInFile(in);
-	bool firstLineWrited = false;
-	while (cursorPosition > 0) {
-		cursorPosition = ReadLastLinesToBuffer(in, linesBuffer, MAX_LINES_IN_BUFFER, cursorPosition);
-		for (const auto& elem : linesBuffer) {
-			if (!firstLineWrited) {
-				out << elem;
-				firstLineWrited = true;
-			}
-			else {
-				out << endl << elem;
-			}	
-		}
-	}
-	in.close();
-	out.close();
-	return 1;
+bool ReverseLines(const Files& files) {
+    ifstream in(files.InputFileName, ios::binary);
+    if (!in.is_open()) return false;
+
+    ofstream out(files.OutputFileName, ios::binary);
+    if (!out.is_open()) return false;
+
+    LinesBuffer buffer;
+    in.seekg(0, ios::end);
+    buffer.cursor = in.tellg();
+
+    while (buffer.cursor > 0) {
+        ReadToBuffer(in, buffer);
+        WriteReverseBuffer(out, buffer);
+    }
+    return true;
 }
 
-int main()
-{
-	Files files;
-	files = InputFileNames();
-	if (ReverseLines(files)) {
-		cout << "порядок линий поменялся" << endl;
-		return 0;
-	}
-	else {
-		cout << "произошла ошибка при работе программы" << endl;
-		return 1;
-	}
+int main() {
+    Files files = InputFileNames();
+    if (ReverseLines(files)) {
+        cout << "Порядок строк успешно изменен." << endl;
+        return 0;
+    }
+    else {
+        cout << "Произошла ошибка при работе программы." << endl;
+        return 1;
+    }
 }
