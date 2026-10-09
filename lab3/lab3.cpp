@@ -3,12 +3,19 @@
 #include <vector>
 #include <fstream>
 
+/* Выполнил: Поскряков Никита, ПС-21, VS2026
+17. Информация  о  файлах  на  жестких  дисках   компьютера
+записана с помощью дерева. Внешнюю память компьютера увеличили
+путем подключения нового жесткого диска. Решено  перенести  на
+него все папки, в которых содержатся только файлы *.cpp вместе
+с папками до корня дерева. Сформировать и показать  на  экране
+получившееся дерево папок (10).*/
+
 using namespace std;
 
 struct Node {
     string name;
     bool isFile;
-    bool toCopy; 
     vector<Node*> children;
 };
 
@@ -19,7 +26,7 @@ Node* loadTreeFromFile(const string& filename) {
         return nullptr;
     }
 
-    Node* root = new Node{ "Корневой_узел", false, false, {} };
+    Node* root = new Node{ "Корневой_узел", false, {} };
     vector<Node*> path;
     path.push_back(root);
 
@@ -39,7 +46,7 @@ Node* loadTreeFromFile(const string& filename) {
         if (name.empty()) continue;
 
         bool isFile = (name.find('.') != string::npos);
-        Node* newNode = new Node{ name, isFile, false, {} };
+        Node* newNode = new Node{ name, isFile, {} };
 
         while (indents.back() >= spaceCount) {
             path.pop_back();
@@ -79,35 +86,18 @@ bool isCppFile(const string& name) {
 Node* copyTargetPaths(Node* node) {
     if (!node) return nullptr;
 
-    bool isTargetFolder = false;
-    if (!node->isFile && !node->children.empty()) {
-        isTargetFolder = true;
-        for (Node* child : node->children) {
-            if (!child->isFile || !isCppFile(child->name)) {
-                isTargetFolder = false;
-                break;
-            }
+    if (node->isFile) {
+        if (isCppFile(node->name)) {
+            return new Node{ node->name, true, {} };
         }
+        return nullptr;
     }
 
-    Node* newNode = new Node{ node->name, node->isFile, false, {} };
-
-    if (isTargetFolder) {
-        for (Node* child : node->children) {
-            newNode->children.push_back(new Node{ child->name, true, false, {} });
-        }
-        return newNode;
-    }
-    else {
-        if (!node->isFile) {
-            for (Node* child : node->children) {
-                if (!child->isFile) {
-                    Node* childCopy = copyTargetPaths(child);
-                    if (childCopy) {
-                        newNode->children.push_back(childCopy);
-                    }
-                }
-            }
+    Node* newNode = new Node{ node->name, false, {} };
+    for (Node* child : node->children) {
+        Node* childCopy = copyTargetPaths(child);
+        if (childCopy) {
+            newNode->children.push_back(childCopy);
         }
     }
 
@@ -123,17 +113,12 @@ Node* copyTargetPaths(Node* node) {
 Node* processTree(Node* root) {
     if (!root) return nullptr;
 
-    Node* newRoot = new Node{ "Новый_диск:", false, false, {} };
+    Node* newRoot = new Node{ "Новый_диск:", false, {} };
 
     for (Node* child : root->children) {
-        if (!child->isFile) {
-            Node* copiedBranch = copyTargetPaths(child);
-            if (copiedBranch) {
-                newRoot->children.push_back(copiedBranch);
-            }
-        }
-        else if (isCppFile(child->name)) {
-            newRoot->children.push_back(new Node{ child->name, true, false, {} });
+        Node* copiedBranch = copyTargetPaths(child);
+        if (copiedBranch) {
+            newRoot->children.push_back(copiedBranch);
         }
     }
     return newRoot;
@@ -148,7 +133,6 @@ void freeTree(Node* node) {
 }
 
 int main() {
-
     Node* root = nullptr;
     Node* newDriveRoot = nullptr;
     int choice;
@@ -157,7 +141,7 @@ int main() {
         cout << "\n=== Меню ===\n";
         cout << "1. Загрузить дерево из файла\n";
         cout << "2. Показать исходное дерево\n";
-        cout << "3. Сформировать новое дерево (перенести папки с *.cpp)\n";
+        cout << "3. Сформировать новое дерево (отфильтровать .cpp файлы)\n";
         cout << "4. Показать новое дерево\n";
         cout << "0. Выход\n";
         cout << "Ваш выбор: ";

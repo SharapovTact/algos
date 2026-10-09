@@ -7,6 +7,11 @@ ClearDir
     hello.cpp
 Project2
   Subproject
+    txt
+      txt
+        file.cpp
+        txt3
+          my.txt
     new.cpp
     Directory
       file.txt
